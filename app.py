@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # 1. SETUP & CONFIG
 st.set_page_config(page_title="Bands Seen Live", layout="wide")
@@ -21,15 +22,12 @@ def load_data():
 try:
     df = load_data()
     
-    # Extract Year and Month/Year period for average calculations
+    # Extract Year 
     df['Year'] = df['Date Seen'].dt.year
 
     # 3. SIDEBAR / FILTERS
     st.sidebar.header("Filters")
-    
-    # Create Year Filter
     available_years = sorted(df['Year'].dropna().unique().tolist(), reverse=True)
-    
     timeframe = st.sidebar.radio("Select Timeframe", options=["All Time", "Specific Year(s)"])
     
     if timeframe == "Specific Year(s)":
@@ -38,68 +36,123 @@ try:
     else:
         filtered_df = df.copy()
 
-    # 4. METRICS CALCULATIONS
+    # 4. METRICS & ADVANCED CALCULATIONS
     total_bands = len(filtered_df)
     unique_bands = filtered_df['Artist'].nunique()
     total_gigs = filtered_df['Date Seen'].nunique()
 
-    # Calculate Longest Gap Between Gigs
-    # We sort by unique dates first, then find the difference in days between them
+    # Longest Gap
     sorted_dates = filtered_df['Date Seen'].drop_duplicates().sort_values()
-    if len(sorted_dates) > 1:
-        longest_gap = sorted_dates.diff().dt.days.max()
+    longest_gap = sorted_dates.diff().dt.days.max() if len(sorted_dates) > 1 else 0
+
+    # Averages
+    num_years = max(filtered_df['Year'].nunique(), 1)
+    num_months = max(filtered_df['Date Seen'].dt.to_period('M').nunique(), 1)
+    
+    yearly_avg_total, yearly_avg_unique = total_bands / num_years, unique_bands / num_years
+    monthly_avg_total, monthly_avg_unique = total_bands / num_months, unique_bands / num_months
+
+    # MULTI-DAY FESTIVAL LOGIC
+    # Filter only rows that have a festival listed
+    fest_df = filtered_df[filtered_df['Festival'].notna() & (filtered_df['Festival'].str.strip() != '')].copy()
+    
+    if not fest_df.empty:
+        # Sort by Festival Name, then Date
+        fest_df = fest_df.sort_values(by=['Festival', 'Date Seen'])
+        # Find the gap in days between the current row and the previous row for the SAME festival
+        fest_df['Prev_Date'] = fest_df.groupby('Festival')['Date Seen'].shift(1)
+        fest_df['Days_Diff'] = (fest_df['Date Seen'] - fest_df['Prev_Date']).dt.days
+        
+        # It is a "New Festival Attendance" if there is no previous date (NaN) OR the gap is more than 1 day
+        fest_df['New_Instance'] = (fest_df['Days_Diff'].isna()) | (fest_df['Days_Diff'] > 1)
+        total_festivals = fest_df['New_Instance'].sum()
     else:
-        longest_gap = 0
+        total_festivals = 0
 
-    # Calculate Averages 
-    # Use nunique() to dynamically see how many distinct years/months are in the filtered data
-    num_years = filtered_df['Year'].nunique()
-    num_months = filtered_df['Date Seen'].dt.to_period('M').nunique()
-    
-    # Avoid dividing by zero if the dataset is completely empty for some reason
-    num_years = num_years if num_years > 0 else 1
-    num_months = num_months if num_months > 0 else 1
-    
-    yearly_avg_total = total_bands / num_years
-    yearly_avg_unique = unique_bands / num_years
-    monthly_avg_total = total_bands / num_months
-    monthly_avg_unique = unique_bands / num_months
-
-    # 5. RENDER METRICS
+    # 5. RENDER TOP METRICS
     st.subheader("📊 Key Metrics")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Total Bands Seen", total_bands)
     col2.metric("Unique Bands Seen", unique_bands)
     col3.metric("Gigs Attended", total_gigs)
-    col4.metric("Longest Gap (Days)", int(longest_gap))
-
-    st.subheader("📈 Averages")
-    avg1, avg2, avg3, avg4 = st.columns(4)
-    avg1.metric("Yearly Avg (Total)", f"{yearly_avg_total:.1f}")
-    avg2.metric("Yearly Avg (Unique)", f"{yearly_avg_unique:.1f}")
-    avg3.metric("Monthly Avg (Total)", f"{monthly_avg_total:.1f}")
-    avg4.metric("Monthly Avg (Unique)", f"{monthly_avg_unique:.1f}")
+    col4.metric("Festivals Attended", int(total_festivals))
+    col5.metric("Longest Gap (Days)", int(longest_gap))
 
     st.divider()
 
-    # 6. TOP 10 LEADERBOARDS
+    # 6. YEARLY TRENDS (NEW CHARTS)
+    st.subheader("📅 Yearly Trends")
+    trend_col1, trend_col2 = st.columns(2)
+
+    with trend_col1:
+        # Bands Seen Live by Year (Total vs Unique)
+        yearly_stats = filtered_df.groupby('Year').agg(
+            Total_Bands=('Artist', 'count'),
+            Unique_Bands=('Artist', 'nunique')
+        ).reset_index()
+        
+        # Melt data for Plotly grouped bar chart
+        yearly_melted = yearly_stats.melt(id_vars='Year', value_vars=['Total_Bands', 'Unique_Bands'], 
+                                          var_name='Type', value_name='Count')
+        # Clean up labels for the legend
+        yearly_melted['Type'] = yearly_melted['Type'].str.replace('_', ' ')
+        
+        fig_yearly = px.bar(yearly_melted, x='Year', y='Count', color='Type', barmode='group',
+                            title="Total vs Unique Bands per Year")
+        # Ensure x-axis shows discrete years, not decimals like 2010.5
+        fig_yearly.update_layout(xaxis=dict(tickmode='linear', dtick=1)) 
+        st.plotly_chart(fig_yearly, use_container_width=True)
+
+    with trend_col2:
+        # Bands Seen Live By Genre By Year (100% Stacked)
+        genre_year = filtered_df.groupby(['Year', 'Genre']).size().reset_index(name='Count')
+        fig_genre_year = px.bar(genre_year, x='Year', y='Count', color='Genre', 
+                                title="Bands by Genre over Time (100% Stacked)")
+        # barnorm='percent' turns a standard stacked bar into a 100% stacked bar!
+        fig_genre_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
+        st.plotly_chart(fig_genre_year, use_container_width=True)
+
+    st.divider()
+
+    # 7. GENRES & FORMATS (NEW CHARTS)
+    st.subheader("🎵 Genres & Event Types")
+    pie_col1, pie_col2 = st.columns(2)
+
+    with pie_col1:
+        # Band Genres Pie Chart
+        genre_counts = filtered_df['Genre'].value_counts().reset_index()
+        genre_counts.columns = ['Genre', 'Count']
+        fig_pie_genre = px.pie(genre_counts, names='Genre', values='Count', title="All Band Genres (Total Seen)", hole=0.3)
+        fig_pie_genre.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_pie_genre, use_container_width=True)
+
+    with pie_col2:
+        # Festivals vs Gigs Split
+        filtered_df['Event Type'] = filtered_df['Festival'].apply(
+            lambda x: 'Gig' if pd.isna(x) or str(x).strip() == '' else 'Festival'
+        )
+        event_counts = filtered_df['Event Type'].value_counts().reset_index()
+        event_counts.columns = ['Event Type', 'Count']
+        fig_pie_events = px.pie(event_counts, names='Event Type', values='Count', title="Festivals vs Gigs", hole=0.3)
+        fig_pie_events.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_pie_events, use_container_width=True)
+
+    st.divider()
+
+    # 8. TOP 10 LEADERBOARDS (Existing)
     st.subheader("🏆 Top 10 Leaderboards")
     chart_col1, chart_col2 = st.columns(2)
 
     with chart_col1:
-        # Top 10 Bands
         top_bands = filtered_df['Artist'].value_counts().head(10).reset_index()
         top_bands.columns = ['Artist', 'Times Seen']
-        
         fig_bands = px.bar(top_bands, x='Times Seen', y='Artist', orientation='h', text='Times Seen')
-        fig_bands.update_layout(yaxis={'categoryorder':'total ascending'}) # Sorts highest to top
+        fig_bands.update_layout(yaxis={'categoryorder':'total ascending'}) 
         st.plotly_chart(fig_bands, use_container_width=True)
 
     with chart_col2:
-        # Top 10 Venues
         top_venues = filtered_df['Venue'].value_counts().head(10).reset_index()
         top_venues.columns = ['Venue', 'Bands Seen']
-        
         fig_venues = px.bar(top_venues, x='Bands Seen', y='Venue', orientation='h', text='Bands Seen')
         fig_venues.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_venues, use_container_width=True)
