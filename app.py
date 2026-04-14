@@ -24,6 +24,11 @@ try:
     
     # Extract Year 
     df['Year'] = df['Date Seen'].dt.year
+    
+    # Pre-calculate Event Type for the whole dataset
+    df['Event Type'] = df['Festival'].apply(
+        lambda x: 'Gig' if pd.isna(x) or str(x).strip() == '' else 'Festival'
+    )
 
     # 3. SIDEBAR / FILTERS
     st.sidebar.header("Filters")
@@ -53,17 +58,12 @@ try:
     monthly_avg_total, monthly_avg_unique = total_bands / num_months, unique_bands / num_months
 
     # MULTI-DAY FESTIVAL LOGIC
-    # Filter only rows that have a festival listed
-    fest_df = filtered_df[filtered_df['Festival'].notna() & (filtered_df['Festival'].str.strip() != '')].copy()
+    fest_df = filtered_df[filtered_df['Event Type'] == 'Festival'].copy()
     
     if not fest_df.empty:
-        # Sort by Festival Name, then Date
         fest_df = fest_df.sort_values(by=['Festival', 'Date Seen'])
-        # Find the gap in days between the current row and the previous row for the SAME festival
         fest_df['Prev_Date'] = fest_df.groupby('Festival')['Date Seen'].shift(1)
         fest_df['Days_Diff'] = (fest_df['Date Seen'] - fest_df['Prev_Date']).dt.days
-        
-        # It is a "New Festival Attendance" if there is no previous date (NaN) OR the gap is more than 1 day
         fest_df['New_Instance'] = (fest_df['Days_Diff'].isna()) | (fest_df['Days_Diff'] > 1)
         total_festivals = fest_df['New_Instance'].sum()
     else:
@@ -89,9 +89,11 @@ try:
 
     # 6. YEARLY TRENDS
     st.subheader("📅 Yearly Trends")
-    trend_col1, trend_col2 = st.columns(2)
+    
+    # --- ROW 1 ---
+    trend_r1_col1, trend_r1_col2 = st.columns(2)
 
-    with trend_col1:
+    with trend_r1_col1:
         yearly_stats = filtered_df.groupby('Year').agg(
             Total_Bands=('Artist', 'count'),
             Unique_Bands=('Artist', 'nunique')
@@ -106,12 +108,33 @@ try:
         fig_yearly.update_layout(xaxis=dict(tickmode='linear', dtick=1)) 
         st.plotly_chart(fig_yearly, use_container_width=True)
 
-    with trend_col2:
+    with trend_r1_col2:
         genre_year = filtered_df.groupby(['Year', 'Genre']).size().reset_index(name='Count')
         fig_genre_year = px.bar(genre_year, x='Year', y='Count', color='Genre', 
                                 title="Bands by Genre over Time (100% Stacked)")
         fig_genre_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
         st.plotly_chart(fig_genre_year, use_container_width=True)
+
+    # --- ROW 2 (NEW CHARTS) ---
+    trend_r2_col1, trend_r2_col2 = st.columns(2)
+
+    with trend_r2_col1:
+        if not fest_df.empty:
+            fest_year = fest_df.groupby(['Year', 'Festival']).size().reset_index(name='Count')
+            fig_fest_year = px.bar(fest_year, x='Year', y='Count', color='Festival', 
+                                    title="Bands Seen at Festivals by Year (100% Stacked)")
+            fig_fest_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
+            st.plotly_chart(fig_fest_year, use_container_width=True)
+        else:
+            st.info("No festival data available to generate this chart.")
+
+    with trend_r2_col2:
+        event_year = filtered_df.groupby(['Year', 'Event Type']).size().reset_index(name='Count')
+        fig_event_year = px.bar(event_year, x='Year', y='Count', color='Event Type', 
+                                title="Festivals vs Gigs by Year (100% Stacked)",
+                                color_discrete_map={'Gig': '#636EFA', 'Festival': '#EF553B'})
+        fig_event_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
+        st.plotly_chart(fig_event_year, use_container_width=True)
 
     st.divider()
 
@@ -127,21 +150,16 @@ try:
         st.plotly_chart(fig_pie_genre, use_container_width=True)
 
     with pie_col2:
-        filtered_df['Event Type'] = filtered_df['Festival'].apply(
-            lambda x: 'Gig' if pd.isna(x) or str(x).strip() == '' else 'Festival'
-        )
         event_counts = filtered_df['Event Type'].value_counts().reset_index()
         event_counts.columns = ['Event Type', 'Count']
-        fig_pie_events = px.pie(event_counts, names='Event Type', values='Count', title="Festivals vs Gigs", hole=0.3)
+        fig_pie_events = px.pie(event_counts, names='Event Type', values='Count', title="Festivals vs Gigs (All Time)", hole=0.3)
         fig_pie_events.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_pie_events, use_container_width=True)
 
     st.divider()
 
-    # 8. TOP 10 LEADERBOARDS (Updated with Festivals)
+    # 8. TOP 10 LEADERBOARDS 
     st.subheader("🏆 Top 10 Leaderboards")
-    
-    # Changed to 3 columns to fit the new Festival leaderboard
     chart_col1, chart_col2, chart_col3 = st.columns(3)
 
     with chart_col1:
@@ -160,10 +178,8 @@ try:
         
     with chart_col3:
         if not fest_df.empty:
-            # We filter for 'New_Instance' == True so we only count the festival attendance once per event
             top_fests = fest_df[fest_df['New_Instance']].groupby('Festival').size().reset_index(name='Times Attended')
             top_fests = top_fests.sort_values('Times Attended', ascending=False).head(10)
-            
             fig_fests = px.bar(top_fests, x='Times Attended', y='Festival', orientation='h', text='Times Attended', title="Top Festivals")
             fig_fests.update_layout(yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(fig_fests, use_container_width=True)
