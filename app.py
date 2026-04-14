@@ -57,7 +57,7 @@ try:
     yearly_avg_total, yearly_avg_unique = total_bands / num_years, unique_bands / num_years
     monthly_avg_total, monthly_avg_unique = total_bands / num_months, unique_bands / num_months
 
-    # MULTI-DAY FESTIVAL LOGIC
+    # MULTI-DAY Festival LOGIC
     fest_df = filtered_df[filtered_df['Event Type'] == 'Festival'].copy()
     
     if not fest_df.empty:
@@ -100,6 +100,8 @@ try:
     fig_line = px.line(yearly_stats, x='Year', y='Total_Bands', markers=True,
                        title="Total Bands Seen Live Over Time")
     fig_line.update_layout(xaxis=dict(tickmode='linear', dtick=1), yaxis_title="Count")
+    # Forces the Y-axis to always start at 0
+    fig_line.update_yaxes(rangemode="tozero")
     st.plotly_chart(fig_line, use_container_width=True)
     
     # --- ROW 1 ---
