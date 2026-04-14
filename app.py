@@ -90,15 +90,22 @@ try:
     # 6. YEARLY TRENDS
     st.subheader("📅 Yearly Trends")
     
+    # Pre-calculate yearly stats for both the line chart and the bar chart
+    yearly_stats = filtered_df.groupby('Year').agg(
+        Total_Bands=('Artist', 'count'),
+        Unique_Bands=('Artist', 'nunique')
+    ).reset_index()
+
+    # --- TOP ROW (FULL WIDTH LINE CHART) ---
+    fig_line = px.line(yearly_stats, x='Year', y='Total_Bands', markers=True,
+                       title="Total Bands Seen Live Over Time")
+    fig_line.update_layout(xaxis=dict(tickmode='linear', dtick=1), yaxis_title="Count")
+    st.plotly_chart(fig_line, use_container_width=True)
+    
     # --- ROW 1 ---
     trend_r1_col1, trend_r1_col2 = st.columns(2)
 
     with trend_r1_col1:
-        yearly_stats = filtered_df.groupby('Year').agg(
-            Total_Bands=('Artist', 'count'),
-            Unique_Bands=('Artist', 'nunique')
-        ).reset_index()
-        
         yearly_melted = yearly_stats.melt(id_vars='Year', value_vars=['Total_Bands', 'Unique_Bands'], 
                                           var_name='Type', value_name='Count')
         yearly_melted['Type'] = yearly_melted['Type'].str.replace('_', ' ')
@@ -115,7 +122,7 @@ try:
         fig_genre_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
         st.plotly_chart(fig_genre_year, use_container_width=True)
 
-    # --- ROW 2 (NEW CHARTS) ---
+    # --- ROW 2 ---
     trend_r2_col1, trend_r2_col2 = st.columns(2)
 
     with trend_r2_col1:
