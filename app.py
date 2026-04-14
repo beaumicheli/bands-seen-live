@@ -87,46 +87,39 @@ try:
 
     st.divider()
 
-    # 6. YEARLY TRENDS (NEW CHARTS)
+    # 6. YEARLY TRENDS
     st.subheader("📅 Yearly Trends")
     trend_col1, trend_col2 = st.columns(2)
 
     with trend_col1:
-        # Bands Seen Live by Year (Total vs Unique)
         yearly_stats = filtered_df.groupby('Year').agg(
             Total_Bands=('Artist', 'count'),
             Unique_Bands=('Artist', 'nunique')
         ).reset_index()
         
-        # Melt data for Plotly grouped bar chart
         yearly_melted = yearly_stats.melt(id_vars='Year', value_vars=['Total_Bands', 'Unique_Bands'], 
                                           var_name='Type', value_name='Count')
-        # Clean up labels for the legend
         yearly_melted['Type'] = yearly_melted['Type'].str.replace('_', ' ')
         
         fig_yearly = px.bar(yearly_melted, x='Year', y='Count', color='Type', barmode='group',
                             title="Total vs Unique Bands per Year")
-        # Ensure x-axis shows discrete years, not decimals like 2010.5
         fig_yearly.update_layout(xaxis=dict(tickmode='linear', dtick=1)) 
         st.plotly_chart(fig_yearly, use_container_width=True)
 
     with trend_col2:
-        # Bands Seen Live By Genre By Year (100% Stacked)
         genre_year = filtered_df.groupby(['Year', 'Genre']).size().reset_index(name='Count')
         fig_genre_year = px.bar(genre_year, x='Year', y='Count', color='Genre', 
                                 title="Bands by Genre over Time (100% Stacked)")
-        # barnorm='percent' turns a standard stacked bar into a 100% stacked bar!
         fig_genre_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
         st.plotly_chart(fig_genre_year, use_container_width=True)
 
     st.divider()
 
-    # 7. GENRES & FORMATS (NEW CHARTS)
+    # 7. GENRES & FORMATS
     st.subheader("🎵 Genres & Event Types")
     pie_col1, pie_col2 = st.columns(2)
 
     with pie_col1:
-        # Band Genres Pie Chart
         genre_counts = filtered_df['Genre'].value_counts().reset_index()
         genre_counts.columns = ['Genre', 'Count']
         fig_pie_genre = px.pie(genre_counts, names='Genre', values='Count', title="All Band Genres (Total Seen)", hole=0.3)
@@ -134,7 +127,6 @@ try:
         st.plotly_chart(fig_pie_genre, use_container_width=True)
 
     with pie_col2:
-        # Festivals vs Gigs Split
         filtered_df['Event Type'] = filtered_df['Festival'].apply(
             lambda x: 'Gig' if pd.isna(x) or str(x).strip() == '' else 'Festival'
         )
@@ -146,23 +138,37 @@ try:
 
     st.divider()
 
-    # 8. TOP 10 LEADERBOARDS (Existing)
+    # 8. TOP 10 LEADERBOARDS (Updated with Festivals)
     st.subheader("🏆 Top 10 Leaderboards")
-    chart_col1, chart_col2 = st.columns(2)
+    
+    # Changed to 3 columns to fit the new Festival leaderboard
+    chart_col1, chart_col2, chart_col3 = st.columns(3)
 
     with chart_col1:
         top_bands = filtered_df['Artist'].value_counts().head(10).reset_index()
         top_bands.columns = ['Artist', 'Times Seen']
-        fig_bands = px.bar(top_bands, x='Times Seen', y='Artist', orientation='h', text='Times Seen')
+        fig_bands = px.bar(top_bands, x='Times Seen', y='Artist', orientation='h', text='Times Seen', title="Top Artists")
         fig_bands.update_layout(yaxis={'categoryorder':'total ascending'}) 
         st.plotly_chart(fig_bands, use_container_width=True)
 
     with chart_col2:
         top_venues = filtered_df['Venue'].value_counts().head(10).reset_index()
         top_venues.columns = ['Venue', 'Bands Seen']
-        fig_venues = px.bar(top_venues, x='Bands Seen', y='Venue', orientation='h', text='Bands Seen')
+        fig_venues = px.bar(top_venues, x='Bands Seen', y='Venue', orientation='h', text='Bands Seen', title="Top Venues")
         fig_venues.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_venues, use_container_width=True)
+        
+    with chart_col3:
+        if not fest_df.empty:
+            # We filter for 'New_Instance' == True so we only count the festival attendance once per event
+            top_fests = fest_df[fest_df['New_Instance']].groupby('Festival').size().reset_index(name='Times Attended')
+            top_fests = top_fests.sort_values('Times Attended', ascending=False).head(10)
+            
+            fig_fests = px.bar(top_fests, x='Times Attended', y='Festival', orientation='h', text='Times Attended', title="Top Festivals")
+            fig_fests.update_layout(yaxis={'categoryorder':'total ascending'})
+            st.plotly_chart(fig_fests, use_container_width=True)
+        else:
+            st.info("No festival data to display.")
 
 except Exception as e:
     st.error(f"Error loading data. Check your Google Sheet URL or columns. Details: {e}")
