@@ -3,58 +3,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# 1. SETUP & CONFIG (Must be the first command)
+# 1. SETUP & CONFIG
 st.set_page_config(page_title="Bands Seen Live", layout="wide")
-
-# Custom CSS for Glassmorphism and Night Mode
-st.markdown("""
-    <style>
-    /* Main background */
-    .stApp {
-        background-color: #0e1117;
-        color: #fafafa;
-    }
-    
-    /* Modernizing Metric Cards */
-    [data-testid="stMetricValue"] {
-        font-size: 2.2rem;
-        font-weight: 800;
-        color: #00d4ff;
-    }
-    
-    /* Adding 'Card' styling to columns */
-    div[data-testid="column"] {
-        background-color: #161b22;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #30363d;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background-color: #0d1117;
-        border-right: 1px solid #30363d;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("🎸 Bands Seen Live Dashboard")
 
 # Replace this with your Google Sheet URL (Ensure it ends in /export?format=csv)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/14A51bdUSAA42npkHwheLjgR2VVYDGKH9SivzSOkYe8o/export?format=csv"
-
-# Reusable chart styling function to keep code clean
-def apply_modern_styling(fig):
-    fig.update_layout(
-        template="plotly_dark",
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor='#30363d'),
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
-    return fig
 
 # 2. DATA LOADING & CLEANING
 @st.cache_data(ttl=600) # Refreshes every 10 mins
@@ -118,24 +72,25 @@ try:
     # 5. RENDER TOP METRICS
     st.subheader("📊 Key Metrics")
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("🤘 Total Bands", total_bands)
-    col2.metric("🎸 Unique Bands", unique_bands)
-    col3.metric("🎟️ Gigs Attended", total_gigs)
-    col4.metric("⛺ Festivals", int(total_festivals))
-    col5.metric("⏳ Longest Gap", f"{int(longest_gap)} Days")
+    col1.metric("Total Bands Seen", total_bands)
+    col2.metric("Unique Bands Seen", unique_bands)
+    col3.metric("Gigs Attended", total_gigs)
+    col4.metric("Festivals Attended", int(total_festivals))
+    col5.metric("Longest Gap (Days)", int(longest_gap))
 
     st.subheader("📈 Averages")
     avg1, avg2, avg3, avg4 = st.columns(4)
-    avg1.metric("📅 Yearly (Total)", f"{yearly_avg_total:.1f}")
-    avg2.metric("📅 Yearly (Unique)", f"{yearly_avg_unique:.1f}")
-    avg3.metric("🗓️ Monthly (Total)", f"{monthly_avg_total:.1f}")
-    avg4.metric("🗓️ Monthly (Unique)", f"{monthly_avg_unique:.1f}")
+    avg1.metric("Yearly Avg (Total)", f"{yearly_avg_total:.1f}")
+    avg2.metric("Yearly Avg (Unique)", f"{yearly_avg_unique:.1f}")
+    avg3.metric("Monthly Avg (Total)", f"{monthly_avg_total:.1f}")
+    avg4.metric("Monthly Avg (Unique)", f"{monthly_avg_unique:.1f}")
 
     st.divider()
 
     # 6. YEARLY TRENDS
     st.subheader("📅 Yearly Trends")
     
+    # Pre-calculate yearly stats for both the line chart and the bar chart
     yearly_stats = filtered_df.groupby('Year').agg(
         Total_Bands=('Artist', 'count'),
         Unique_Bands=('Artist', 'nunique')
@@ -143,11 +98,10 @@ try:
 
     # --- TOP ROW (FULL WIDTH LINE CHART) ---
     fig_line = px.line(yearly_stats, x='Year', y='Total_Bands', markers=True,
-                       title="Total Bands Seen Live Over Time",
-                       color_discrete_sequence=['#00d4ff'])
+                       title="Total Bands Seen Live Over Time")
     fig_line.update_layout(xaxis=dict(tickmode='linear', dtick=1), yaxis_title="Count")
+    # Forces the Y-axis to always start at 0
     fig_line.update_yaxes(rangemode="tozero")
-    fig_line = apply_modern_styling(fig_line)
     st.plotly_chart(fig_line, use_container_width=True)
     
     # --- ROW 1 ---
@@ -159,19 +113,15 @@ try:
         yearly_melted['Type'] = yearly_melted['Type'].str.replace('_', ' ')
         
         fig_yearly = px.bar(yearly_melted, x='Year', y='Count', color='Type', barmode='group',
-                            title="Total vs Unique Bands per Year",
-                            color_discrete_sequence=['#00d4ff', '#ab63fa'])
+                            title="Total vs Unique Bands per Year")
         fig_yearly.update_layout(xaxis=dict(tickmode='linear', dtick=1)) 
-        fig_yearly = apply_modern_styling(fig_yearly)
         st.plotly_chart(fig_yearly, use_container_width=True)
 
     with trend_r1_col2:
         genre_year = filtered_df.groupby(['Year', 'Genre']).size().reset_index(name='Count')
         fig_genre_year = px.bar(genre_year, x='Year', y='Count', color='Genre', 
-                                title="Bands by Genre over Time (100% Stacked)",
-                                color_discrete_sequence=px.colors.qualitative.Pastel)
+                                title="Bands by Genre over Time (100% Stacked)")
         fig_genre_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
-        fig_genre_year = apply_modern_styling(fig_genre_year)
         st.plotly_chart(fig_genre_year, use_container_width=True)
 
     # --- ROW 2 ---
@@ -181,22 +131,18 @@ try:
         if not fest_df.empty:
             fest_year = fest_df.groupby(['Year', 'Festival']).size().reset_index(name='Count')
             fig_fest_year = px.bar(fest_year, x='Year', y='Count', color='Festival', 
-                                    title="Bands Seen at Festivals by Year (100% Stacked)",
-                                    color_discrete_sequence=px.colors.qualitative.Vivid)
+                                    title="Bands Seen at Festivals by Year (100% Stacked)")
             fig_fest_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
-            fig_fest_year = apply_modern_styling(fig_fest_year)
             st.plotly_chart(fig_fest_year, use_container_width=True)
         else:
             st.info("No festival data available to generate this chart.")
 
     with trend_r2_col2:
         event_year = filtered_df.groupby(['Year', 'Event Type']).size().reset_index(name='Count')
-        # Custom neon map for Event Types
         fig_event_year = px.bar(event_year, x='Year', y='Count', color='Event Type', 
                                 title="Festivals vs Gigs by Year (100% Stacked)",
-                                color_discrete_map={'Gig': '#00d4ff', 'Festival': '#ff007f'})
+                                color_discrete_map={'Gig': '#636EFA', 'Festival': '#EF553B'})
         fig_event_year.update_layout(barmode='stack', barnorm='percent', xaxis=dict(tickmode='linear', dtick=1), yaxis_title="% of Total")
-        fig_event_year = apply_modern_styling(fig_event_year)
         st.plotly_chart(fig_event_year, use_container_width=True)
 
     st.divider()
@@ -208,19 +154,15 @@ try:
     with pie_col1:
         genre_counts = filtered_df['Genre'].value_counts().reset_index()
         genre_counts.columns = ['Genre', 'Count']
-        fig_pie_genre = px.pie(genre_counts, names='Genre', values='Count', title="All Band Genres (Total Seen)", hole=0.3,
-                               color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig_pie_genre.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0e1117', width=2)))
-        fig_pie_genre = apply_modern_styling(fig_pie_genre)
+        fig_pie_genre = px.pie(genre_counts, names='Genre', values='Count', title="All Band Genres (Total Seen)", hole=0.3)
+        fig_pie_genre.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_pie_genre, use_container_width=True)
 
     with pie_col2:
         event_counts = filtered_df['Event Type'].value_counts().reset_index()
         event_counts.columns = ['Event Type', 'Count']
-        fig_pie_events = px.pie(event_counts, names='Event Type', values='Count', title="Festivals vs Gigs (All Time)", hole=0.3,
-                                color_discrete_map={'Gig': '#00d4ff', 'Festival': '#ff007f'})
-        fig_pie_events.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0e1117', width=2)))
-        fig_pie_events = apply_modern_styling(fig_pie_events)
+        fig_pie_events = px.pie(event_counts, names='Event Type', values='Count', title="Festivals vs Gigs (All Time)", hole=0.3)
+        fig_pie_events.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_pie_events, use_container_width=True)
 
     st.divider()
@@ -232,29 +174,23 @@ try:
     with chart_col1:
         top_bands = filtered_df['Artist'].value_counts().head(10).reset_index()
         top_bands.columns = ['Artist', 'Times Seen']
-        fig_bands = px.bar(top_bands, x='Times Seen', y='Artist', orientation='h', text='Times Seen', title="Top Artists",
-                           color_discrete_sequence=['#00CC96'])
+        fig_bands = px.bar(top_bands, x='Times Seen', y='Artist', orientation='h', text='Times Seen', title="Top Artists")
         fig_bands.update_layout(yaxis={'categoryorder':'total ascending'}) 
-        fig_bands = apply_modern_styling(fig_bands)
         st.plotly_chart(fig_bands, use_container_width=True)
 
     with chart_col2:
         top_venues = filtered_df['Venue'].value_counts().head(10).reset_index()
         top_venues.columns = ['Venue', 'Bands Seen']
-        fig_venues = px.bar(top_venues, x='Bands Seen', y='Venue', orientation='h', text='Bands Seen', title="Top Venues",
-                            color_discrete_sequence=['#ab63fa'])
+        fig_venues = px.bar(top_venues, x='Bands Seen', y='Venue', orientation='h', text='Bands Seen', title="Top Venues")
         fig_venues.update_layout(yaxis={'categoryorder':'total ascending'})
-        fig_venues = apply_modern_styling(fig_venues)
         st.plotly_chart(fig_venues, use_container_width=True)
         
     with chart_col3:
         if not fest_df.empty:
             top_fests = fest_df[fest_df['New_Instance']].groupby('Festival').size().reset_index(name='Times Attended')
             top_fests = top_fests.sort_values('Times Attended', ascending=False).head(10)
-            fig_fests = px.bar(top_fests, x='Times Attended', y='Festival', orientation='h', text='Times Attended', title="Top Festivals",
-                               color_discrete_sequence=['#ff007f'])
-            fig_fests.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis=dict(tickmode='linear', dtick=1))
-            fig_fests = apply_modern_styling(fig_fests)
+            fig_fests = px.bar(top_fests, x='Times Attended', y='Festival', orientation='h', text='Times Attended', title="Top Festivals")
+            fig_fests.update_layout(yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(fig_fests, use_container_width=True)
         else:
             st.info("No festival data to display.")
