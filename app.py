@@ -78,6 +78,13 @@ try:
     col4.metric("Festivals Attended", int(total_festivals))
     col5.metric("Longest Gap (Days)", int(longest_gap))
 
+    st.subheader("📈 Averages")
+    avg1, avg2, avg3, avg4 = st.columns(4)
+    avg1.metric("Yearly Avg (Total)", f"{yearly_avg_total:.1f}")
+    avg2.metric("Yearly Avg (Unique)", f"{yearly_avg_unique:.1f}")
+    avg3.metric("Monthly Avg (Total)", f"{monthly_avg_total:.1f}")
+    avg4.metric("Monthly Avg (Unique)", f"{monthly_avg_unique:.1f}")
+
     st.divider()
 
     # 6. YEARLY TRENDS (NEW CHARTS)
