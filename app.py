@@ -16,10 +16,23 @@ LAST_FM_USER = "Beach_Patrol"
 LAST_FM_KEY = st.secrets["LASTFM_API_KEY"]
 
 # 2. DATA LOADING
-@st.cache_data(ttl=600) # Refreshes every 10 mins
+@st.cache_data(ttl=600)
 def load_data():
+    # 1. Read the CSV
     df = pd.read_csv(SHEET_URL)
-    df['Date Seen'] = pd.to_datetime(df['Date Seen'])
+    
+    # 2. Clean column names (removes any accidental leading/trailing spaces)
+    df.columns = df.columns.str.strip()
+    
+    # Debug: If it still fails, this will show you what columns Pandas actually sees
+    # st.write("Columns found in sheet:", df.columns.tolist()) 
+
+    # 3. Convert date with Australian format (Day First)
+    if 'Date Seen' in df.columns:
+        df['Date Seen'] = pd.to_datetime(df['Date Seen'], dayfirst=True)
+    else:
+        st.error(f"Could not find 'Date Seen' column. Found these instead: {df.columns.tolist()}")
+        
     return df
 
 try:
